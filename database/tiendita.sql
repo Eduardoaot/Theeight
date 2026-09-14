@@ -18,10 +18,20 @@ CREATE TABLE productos (
     cantidad             INT NOT NULL DEFAULT 0
 );
 
+-- ---------------------------------------------
+-- 2. Vista
+-- ---------------------------------------------
+
+-- Todos los productos con su cantidad
+CREATE VIEW vw_productos AS
+SELECT id_producto, nombre_producto, precio_producto,
+       descripcion_producto, cantidad
+FROM productos;
+
 DELIMITER //
 
 -- ---------------------------------------------
--- 2. Funciones
+-- 3. Funciones
 -- ---------------------------------------------
 
 -- Devuelve 1 si el producto hay que comprarlo (precio > 100 y 10 o menos piezas)
@@ -44,7 +54,7 @@ BEGIN
 END //
 
 -- ---------------------------------------------
--- 3. Triggers (validan precio y cantidad)
+-- 4. Triggers (validan precio y cantidad)
 -- ---------------------------------------------
 CREATE TRIGGER trg_productos_before_insert
 BEFORE INSERT ON productos
@@ -67,32 +77,67 @@ BEGIN
 END //
 
 -- ---------------------------------------------
--- 4. Procedimientos almacenados
+-- 5. Procedimiento almacenado
 -- ---------------------------------------------
 
--- Todos los productos con su cantidad
-CREATE PROCEDURE sp_listar_productos()
+-- Un solo procedimiento para todo (CRUD)
+-- p_accion:
+--   'LEER'          todos los productos (usa la vista)
+--   'LEER_COMPRAR'  productos por comprar, con costo y total
+--   'INSERTAR'      nuevo producto (nombre, precio, descripcion, cantidad)
+--   'ACTUALIZAR'    cambia un producto por id (los parametros NULL no se cambian)
+--   'ELIMINAR'      borra un producto por id
+CREATE PROCEDURE sp_productos(
+    IN p_accion      VARCHAR(20),
+    IN p_id          INT,
+    IN p_nombre      VARCHAR(100),
+    IN p_precio      DECIMAL(10,2),
+    IN p_descripcion VARCHAR(255),
+    IN p_cantidad    INT
+)
 BEGIN
-    SELECT id_producto, nombre_producto, precio_producto,
-           descripcion_producto, cantidad
-    FROM productos
-    ORDER BY id_producto;
-END //
+    CASE p_accion
+        WHEN 'LEER' THEN
+            SELECT * FROM vw_productos ORDER BY id_producto;
 
--- Productos que hay que comprar (restablecimiento)
-CREATE PROCEDURE sp_productos_por_comprar()
-BEGIN
-    SELECT id_producto, nombre_producto, precio_producto, cantidad,
-           fn_piezas_faltantes(cantidad) AS piezas_a_comprar
-    FROM productos
-    WHERE fn_necesita_compra(precio_producto, cantidad)
-    ORDER BY cantidad;
+        -- costo_producto = precio * piezas a comprar
+        -- total_compra   = suma del costo de todos los productos a comprar
+        WHEN 'LEER_COMPRAR' THEN
+            SELECT id_producto, nombre_producto, precio_producto, cantidad,
+                   fn_piezas_faltantes(cantidad) AS piezas_a_comprar,
+                   precio_producto * fn_piezas_faltantes(cantidad) AS costo_producto,
+                   SUM(precio_producto * fn_piezas_faltantes(cantidad)) OVER () AS total_compra
+            FROM productos
+            WHERE fn_necesita_compra(precio_producto, cantidad)
+            ORDER BY cantidad;
+
+        WHEN 'INSERTAR' THEN
+            INSERT INTO productos (nombre_producto, precio_producto, descripcion_producto, cantidad)
+            VALUES (p_nombre, p_precio, p_descripcion, IFNULL(p_cantidad, 0));
+            SELECT LAST_INSERT_ID() AS id_producto;
+
+        WHEN 'ACTUALIZAR' THEN
+            UPDATE productos
+            SET nombre_producto      = IFNULL(p_nombre, nombre_producto),
+                precio_producto      = IFNULL(p_precio, precio_producto),
+                descripcion_producto = IFNULL(p_descripcion, descripcion_producto),
+                cantidad             = IFNULL(p_cantidad, cantidad)
+            WHERE id_producto = p_id;
+            SELECT p_id AS id_producto;
+
+        WHEN 'ELIMINAR' THEN
+            DELETE FROM productos WHERE id_producto = p_id;
+            SELECT ROW_COUNT() AS filas_eliminadas;
+
+        ELSE
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Accion no valida';
+    END CASE;
 END //
 
 DELIMITER ;
 
 -- ---------------------------------------------
--- 5. Datos (30 productos)
+-- 6. Datos (30 productos)
 -- ---------------------------------------------
 INSERT INTO productos (nombre_producto, precio_producto, descripcion_producto, cantidad) VALUES
 ('Refresco de cola 600 ml',        18.00, 'Bebida gaseosa sabor cola',            40),
@@ -127,5 +172,8 @@ INSERT INTO productos (nombre_producto, precio_producto, descripcion_producto, c
 ('Pila AA 4 piezas',              120.00, 'Pilas alcalinas tamaño AA',             5);
 
 -- Prueba rapida
--- CALL sp_listar_productos();
--- CALL sp_productos_por_comprar();
+-- CALL sp_productos('LEER', NULL, NULL, NULL, NULL, NULL);
+-- CALL sp_productos('LEER_COMPRAR', NULL, NULL, NULL, NULL, NULL);
+-- CALL sp_productos('INSERTAR', NULL, 'Sal 1 kg', 12.00, 'Sal de mesa', 20);
+-- CALL sp_productos('ACTUALIZAR', 1, NULL, NULL, NULL, 50);
+-- CALL sp_productos('ELIMINAR', 31, NULL, NULL, NULL, NULL);

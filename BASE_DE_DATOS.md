@@ -33,37 +33,89 @@ Si tienen 10 o menos, hay que comprar hasta llegar a 11.
 | `trg_productos_before_insert` | Antes de insertar | Rechaza precio o cantidad negativos |
 | `trg_productos_before_update` | Antes de actualizar | Rechaza precio o cantidad negativos |
 
-## Procedimientos almacenados
+## Vista
 
-| Procedimiento | Qué hace | Lo usa |
-|---------------|----------|--------|
-| `sp_listar_productos()` | Lista todos los productos con su cantidad | Tabla principal |
-| `sp_productos_por_comprar()` | Lista los que cumplen la regla de restablecimiento | Botón "Restablecimiento" |
+| Vista | Qué hace | La usa |
+|-------|----------|--------|
+| `vw_productos` | Muestra todos los productos con su cantidad | Acción `LEER` del procedimiento |
 
-La consulta principal del restablecimiento es:
+```sql
+SELECT * FROM vw_productos ORDER BY id_producto;
+```
+
+## Procedimiento almacenado `sp_productos`
+
+Un solo procedimiento hace todo: leer, insertar, actualizar y eliminar.
+
+```sql
+CALL sp_productos(p_accion, p_id, p_nombre, p_precio, p_descripcion, p_cantidad);
+```
+
+| `p_accion` | Qué hace | Parámetros que usa | Regresa |
+|------------|----------|--------------------|---------|
+| `LEER` | Todos los productos (desde `vw_productos`) | ninguno | Lista de productos |
+| `LEER_COMPRAR` | Productos por comprar, con costo y total | ninguno | Lista por comprar |
+| `INSERTAR` | Agrega un producto | nombre, precio, descripción, cantidad | `id_producto` nuevo |
+| `ACTUALIZAR` | Cambia un producto | id + los campos a cambiar (`NULL` = no cambiar) | `id_producto` |
+| `ELIMINAR` | Borra un producto | id | `filas_eliminadas` |
+
+Cualquier otra acción lanza el error `Accion no valida`.
+Los triggers siguen validando: un `INSERTAR` o `ACTUALIZAR` con precio o cantidad negativos es rechazado.
+
+Ejemplos:
+
+```sql
+CALL sp_productos('LEER',         NULL, NULL, NULL, NULL, NULL);
+CALL sp_productos('LEER_COMPRAR', NULL, NULL, NULL, NULL, NULL);
+CALL sp_productos('INSERTAR',     NULL, 'Sal 1 kg', 12.00, 'Sal de mesa', 20);
+CALL sp_productos('ACTUALIZAR',   1,    NULL, NULL, NULL, 50);   -- solo cambia la cantidad
+CALL sp_productos('ELIMINAR',     31,   NULL, NULL, NULL, NULL);
+```
+
+### Acción `LEER_COMPRAR`
+
+Columnas que regresa:
+
+| Columna | Cálculo |
+|---------|---------|
+| `piezas_a_comprar` | `11 - cantidad` |
+| `costo_producto` | `precio_producto * piezas_a_comprar` |
+| `total_compra` | Suma de `costo_producto` de todos los productos a comprar (mismo valor en cada fila) |
+
+La consulta del restablecimiento es:
 
 ```sql
 SELECT id_producto, nombre_producto, precio_producto, cantidad,
-       fn_piezas_faltantes(cantidad) AS piezas_a_comprar
+       fn_piezas_faltantes(cantidad) AS piezas_a_comprar,
+       precio_producto * fn_piezas_faltantes(cantidad) AS costo_producto,
+       SUM(precio_producto * fn_piezas_faltantes(cantidad)) OVER () AS total_compra
 FROM productos
-WHERE fn_necesita_compra(precio_producto, cantidad);
+WHERE fn_necesita_compra(precio_producto, cantidad)
+ORDER BY cantidad;
 ```
 
-Que equivale a:
+Que equivale a (sin funciones):
 
 ```sql
-SELECT * FROM productos
-WHERE precio_producto > 100 AND cantidad <= 10;
+SELECT id_producto, nombre_producto, precio_producto, cantidad,
+       11 - cantidad AS piezas_a_comprar,
+       precio_producto * (11 - cantidad) AS costo_producto,
+       SUM(precio_producto * (11 - cantidad)) OVER () AS total_compra
+FROM productos
+WHERE precio_producto > 100 AND cantidad <= 10
+ORDER BY cantidad;
 ```
+
+`SUM(...) OVER ()` es una función de ventana (MySQL 8): suma todas las filas sin agruparlas.
 
 ## Pruebas
 
 ```sql
-CALL sp_listar_productos();        -- 30 productos
-CALL sp_productos_por_comprar();   -- 7 productos
+CALL sp_productos('LEER', NULL, NULL, NULL, NULL, NULL);          -- 30 productos
+CALL sp_productos('LEER_COMPRAR', NULL, NULL, NULL, NULL, NULL);  -- 7 productos, total_compra = 6330.00
 
 -- El trigger debe rechazar esto:
-UPDATE productos SET cantidad = -5 WHERE id_producto = 1;
+CALL sp_productos('ACTUALIZAR', 1, NULL, NULL, NULL, -5);
 ```
 
 ## Cómo correr el proyecto
@@ -80,7 +132,15 @@ UPDATE productos SET cantidad = -5 WHERE id_producto = 1;
 ## Arquitectura
 
 ```
-React (Vite)  --fetch /api-->  Express (server/index.js)  --CALL-->  MySQL
+React (Vite)  --fetch /api-->  Express (server/index.js)  --CALL sp_productos-->  MySQL
 ```
 
-React no se conecta directo a MySQL; el servidor Express llama a los procedimientos almacenados.
+React no se conecta directo a MySQL; todas las rutas del servidor llaman a `sp_productos`:
+
+| Ruta | Acción |
+|------|--------|
+| `GET /api/productos` | `LEER` |
+| `GET /api/productos/por-comprar` | `LEER_COMPRAR` |
+| `POST /api/productos` | `INSERTAR` |
+| `PUT /api/productos/:id` | `ACTUALIZAR` |
+| `DELETE /api/productos/:id` | `ELIMINAR` |

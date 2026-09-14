@@ -12,24 +12,34 @@ const db = mysql.createPool({
 
 const app = express()
 app.use(cors())
+app.use(express.json())
 
-// CALL devuelve [filas, info]; las filas vienen en result[0]
-app.get('/api/productos', async (req, res) => {
+// Llama al unico procedimiento; CALL devuelve [filas, info] y las filas vienen en result[0]
+async function spProductos(accion, id = null, p = {}) {
+  const [result] = await db.query('CALL sp_productos(?, ?, ?, ?, ?, ?)', [
+    accion,
+    id,
+    p.nombre_producto ?? null,
+    p.precio_producto ?? null,
+    p.descripcion_producto ?? null,
+    p.cantidad ?? null,
+  ])
+  return result[0]
+}
+
+// Envuelve cada ruta para responder el error de MySQL (por ejemplo, el del trigger)
+const ruta = (fn) => async (req, res) => {
   try {
-    const [result] = await db.query('CALL sp_listar_productos()')
-    res.json(result[0])
+    res.json(await fn(req))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
-})
+}
 
-app.get('/api/productos/por-comprar', async (req, res) => {
-  try {
-    const [result] = await db.query('CALL sp_productos_por_comprar()')
-    res.json(result[0])
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
+app.get('/api/productos', ruta(() => spProductos('LEER')))
+app.get('/api/productos/por-comprar', ruta(() => spProductos('LEER_COMPRAR')))
+app.post('/api/productos', ruta((req) => spProductos('INSERTAR', null, req.body)))
+app.put('/api/productos/:id', ruta((req) => spProductos('ACTUALIZAR', req.params.id, req.body)))
+app.delete('/api/productos/:id', ruta((req) => spProductos('ELIMINAR', req.params.id)))
 
 app.listen(3001, () => console.log('API en http://localhost:3001'))
