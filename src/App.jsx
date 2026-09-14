@@ -97,8 +97,13 @@ function App() {
 
   const acciones = (p) => (
     <td className="acciones">
-      <button onClick={() => editar(p.id_producto)}>Editar</button>
-      <button className="peligro" onClick={() => eliminar(p.id_producto, p.nombre_producto)}>
+      <button className="boton boton-chico boton-claro" onClick={() => editar(p.id_producto)}>
+        Editar
+      </button>
+      <button
+        className="boton boton-chico boton-peligro"
+        onClick={() => eliminar(p.id_producto, p.nombre_producto)}
+      >
         Eliminar
       </button>
     </td>
@@ -106,19 +111,52 @@ function App() {
 
   return (
     <div className="contenedor">
-      <h1>Tiendita El Eight</h1>
-      {error && <p className="error">{error}</p>}
+      <header className="encabezado">
+        <div>
+          <p className="etiqueta">Tienda de la esquina</p>
+          <h1 className="titulo">Tiendita El Eight</h1>
+        </div>
+        <div className="resumen">
+          <span className="resumen-numero">{productos.length}</span>
+          <span className="resumen-texto">productos</span>
+        </div>
+      </header>
 
-      <form className="formulario" onSubmit={guardar}>
-        <h2>{editandoId ? `Editar producto ${editandoId}` : 'Agregar producto'}</h2>
-        <input name="nombre_producto" placeholder="Nombre" value={formulario.nombre_producto} onChange={cambiar} required />
-        <input name="precio_producto" type="number" step="0.01" min="0" placeholder="Precio" value={formulario.precio_producto} onChange={cambiar} required />
-        <input name="descripcion_producto" placeholder="Descripción" value={formulario.descripcion_producto} onChange={cambiar} />
-        <input name="cantidad" type="number" min="0" placeholder="Cantidad" value={formulario.cantidad} onChange={cambiar} required />
+      {error && (
+        <div className="alerta" role="alert">
+          <span>{error}</span>
+          <button className="boton boton-chico boton-claro" onClick={() => setError('')}>
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      <form className={`tarjeta formulario ${editandoId ? 'editando' : ''}`} onSubmit={guardar}>
+        <h2 className="subtitulo">
+          {editandoId ? `Editar producto ${editandoId}` : 'Agregar producto'}
+        </h2>
+        <label className="campo">
+          <span>Nombre</span>
+          <input name="nombre_producto" value={formulario.nombre_producto} onChange={cambiar} required />
+        </label>
+        <label className="campo">
+          <span>Precio</span>
+          <input name="precio_producto" type="number" step="0.01" min="0" value={formulario.precio_producto} onChange={cambiar} required />
+        </label>
+        <label className="campo">
+          <span>Descripción</span>
+          <input name="descripcion_producto" value={formulario.descripcion_producto} onChange={cambiar} />
+        </label>
+        <label className="campo">
+          <span>Cantidad</span>
+          <input name="cantidad" type="number" min="0" value={formulario.cantidad} onChange={cambiar} required />
+        </label>
         <div className="botones">
-          <button type="submit">{editandoId ? 'Guardar cambios' : 'Agregar'}</button>
+          <button type="submit" className="boton boton-primario">
+            {editandoId ? 'Guardar cambios' : 'Agregar'}
+          </button>
           {editandoId && (
-            <button type="button" className="secundario" onClick={cancelar}>
+            <button type="button" className="boton boton-claro" onClick={cancelar}>
               Cancelar
             </button>
           )}
@@ -126,21 +164,25 @@ function App() {
       </form>
 
       <div className="barra">
-        <span>Total de productos: {productos.length}</span>
-        <button onClick={cargarPorComprar}>Restablecimiento</button>
+        <h2 className="subtitulo">Inventario</h2>
+        <button className="boton boton-acento" onClick={cargarPorComprar}>
+          Restablecimiento
+        </button>
       </div>
 
       {porComprar && (
-        <section className="restablecer">
+        <section className="tarjeta restablecer">
           <div className="barra">
-            <h2>Productos por comprar</h2>
-            <button className="secundario" onClick={() => setPorComprar(null)}>
+            <div>
+              <h2 className="subtitulo">Productos por comprar</h2>
+              <p className="nota">Productos de más de $100 que tienen 10 piezas o menos.</p>
+            </div>
+            <button className="boton boton-claro" onClick={() => setPorComprar(null)}>
               Cerrar
             </button>
           </div>
-          <p>Productos de más de $100 que tienen 10 piezas o menos.</p>
           {porComprar.length === 0 ? (
-            <p>No hay nada que comprar.</p>
+            <p className="nota">No hay nada que comprar.</p>
           ) : (
             <div className="tabla">
               <table>
@@ -148,22 +190,24 @@ function App() {
                   <tr>
                     <th>ID</th>
                     <th>Producto</th>
-                    <th>Precio</th>
-                    <th>Hay</th>
-                    <th>Comprar</th>
-                    <th>Costo</th>
+                    <th className="numero">Precio</th>
+                    <th className="numero">Hay</th>
+                    <th className="numero">Comprar</th>
+                    <th className="numero">Costo</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {porComprar.map((p) => (
-                    <tr key={p.id_producto}>
-                      <td>{p.id_producto}</td>
+                  {porComprar.map((p, i) => (
+                    <tr key={p.id_producto} style={{ '--i': i }}>
+                      <td className="id">{p.id_producto}</td>
                       <td>{p.nombre_producto}</td>
-                      <td>{pesos(p.precio_producto)}</td>
-                      <td>{p.cantidad}</td>
-                      <td>{p.piezas_a_comprar}</td>
-                      <td>{pesos(p.costo_producto)}</td>
+                      <td className="numero">{pesos(p.precio_producto)}</td>
+                      <td className="numero">
+                        <span className="insignia insignia-baja">{p.cantidad}</span>
+                      </td>
+                      <td className="numero">{p.piezas_a_comprar}</td>
+                      <td className="numero">{pesos(p.costo_producto)}</td>
                       {acciones(p)}
                     </tr>
                   ))}
@@ -171,7 +215,7 @@ function App() {
                 <tfoot>
                   <tr className="total">
                     <td colSpan="5">Total a comprar</td>
-                    <td>{pesos(porComprar[0].total_compra)}</td>
+                    <td className="numero">{pesos(porComprar[0].total_compra)}</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -181,33 +225,36 @@ function App() {
         </section>
       )}
 
-      <h2>Todos los productos</h2>
-      <div className="tabla">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Producto</th>
-              <th>Precio</th>
-              <th>Descripción</th>
-              <th>Cantidad</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {productos.map((p) => (
-              <tr key={p.id_producto}>
-                <td>{p.id_producto}</td>
-                <td>{p.nombre_producto}</td>
-                <td>{pesos(p.precio_producto)}</td>
-                <td>{p.descripcion_producto}</td>
-                <td>{p.cantidad}</td>
-                {acciones(p)}
+      <section className="tarjeta">
+        <div className="tabla">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Producto</th>
+                <th className="numero">Precio</th>
+                <th>Descripción</th>
+                <th className="numero">Cantidad</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {productos.map((p, i) => (
+                <tr key={p.id_producto} style={{ '--i': i }}>
+                  <td className="id">{p.id_producto}</td>
+                  <td>{p.nombre_producto}</td>
+                  <td className="numero">{pesos(p.precio_producto)}</td>
+                  <td className="descripcion">{p.descripcion_producto}</td>
+                  <td className="numero">
+                    <span className="insignia">{p.cantidad}</span>
+                  </td>
+                  {acciones(p)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   )
 }
