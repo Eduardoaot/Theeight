@@ -11,6 +11,8 @@ Motor: **MySQL 8**. Script completo: [database/tiendita.sql](database/tiendita.s
 | `precio_producto`      | DECIMAL(10,2) | Precio en pesos                      |
 | `descripcion_producto` | VARCHAR(255)  | Descripción corta                    |
 | `cantidad`             | INT           | Piezas en existencia                 |
+| `estatus`              | ENUM('ACTIVO','DESACTIVADO') | Borrado lógico; por defecto `ACTIVO` |
+| `fecha_baja`           | DATETIME      | Cuándo se desactivó (`NULL` si está activo) |
 
 > Se agregó `cantidad` porque sin ella no se puede saber cuántos hay de cada producto.
 
@@ -31,13 +33,14 @@ Si tienen 10 o menos, hay que comprar hasta llegar a 11.
 | Trigger | Cuándo | Qué hace |
 |---------|--------|----------|
 | `trg_productos_before_insert` | Antes de insertar | Rechaza precio o cantidad negativos |
-| `trg_productos_before_update` | Antes de actualizar | Rechaza precio o cantidad negativos |
+| `trg_productos_before_update` | Antes de actualizar | Rechaza precio o cantidad negativos; pone o limpia `fecha_baja` |
+| `trg_productos_before_delete` | Antes de borrar | Rechaza el `DELETE` (los productos solo se desactivan) |
 
 ## Vista
 
 | Vista | Qué hace | La usa |
 |-------|----------|--------|
-| `vw_productos` | Muestra todos los productos con su cantidad | Acción `LEER` del procedimiento |
+| `vw_productos` | Muestra los productos activos con su cantidad | Acción `LEER` del procedimiento |
 
 ```sql
 SELECT * FROM vw_productos ORDER BY id_producto;
@@ -57,7 +60,12 @@ CALL sp_productos(p_accion, p_id, p_nombre, p_precio, p_descripcion, p_cantidad)
 | `LEER_COMPRAR` | Productos por comprar, con costo y total | ninguno | Lista por comprar |
 | `INSERTAR` | Agrega un producto | nombre, precio, descripción, cantidad | `id_producto` nuevo |
 | `ACTUALIZAR` | Cambia un producto | id + los campos a cambiar (`NULL` = no cambiar) | `id_producto` |
-| `ELIMINAR` | Borra un producto | id | `filas_eliminadas` |
+| `ELIMINAR` | Desactiva un producto (borrado lógico) | id | `filas_eliminadas` |
+| `BUSCAR_SIMILARES` | Productos con nombre parecido (`LIKE`), activos y desactivados | id a excluir (o `NULL`), nombre (`NULL` = todos) | Lista con `estatus` y `fecha_baja` |
+| `REACTIVAR` | Vuelve a activar un producto desactivado | id + los campos a cambiar (`NULL` = no cambiar) | `id_producto` |
+
+Un nombre es "parecido" si uno contiene al otro o si comparten la primera palabra (de 3 letras o más).
+Por ejemplo, `Leche deslactosada` encuentra `Leche entera 1 L`.
 
 Cualquier otra acción lanza el error `Accion no valida`.
 Los triggers siguen validando: un `INSERTAR` o `ACTUALIZAR` con precio o cantidad negativos es rechazado.
@@ -144,3 +152,10 @@ React no se conecta directo a MySQL; todas las rutas del servidor llaman a `sp_p
 | `POST /api/productos` | `INSERTAR` |
 | `PUT /api/productos/:id` | `ACTUALIZAR` |
 | `DELETE /api/productos/:id` | `ELIMINAR` |
+| `GET /api/productos/similares?nombre=&excluir=` | `BUSCAR_SIMILARES` |
+| `POST /api/productos/:id/reactivar` | `REACTIVAR` (+ `ELIMINAR` de `desactivar_id` en la misma transacción) |
+
+Antes de insertar o de cambiar el nombre de un producto, React busca productos parecidos.
+Si hay alguno, muestra un pop up para reactivarlo tal como estaba, reactivarlo con los datos
+corregidos a mano, o guardar el dato como nuevo. Al editar, si se reactiva otro producto,
+el que se estaba editando se desactiva para que no queden duplicados.

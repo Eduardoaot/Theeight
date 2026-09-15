@@ -442,6 +442,97 @@ tbody tr:hover {
 }
 
 /* =============================================
+   Pop up de productos parecidos
+   ============================================= */
+.fondo-dialogo {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--espacio-4);
+  background: rgba(34, 38, 43, 0.45);
+  animation: aparecer 200ms var(--transicion) both;
+}
+
+.dialogo {
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 2 * var(--espacio-4));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-4);
+  background: var(--superficie);
+  border-top: 4px solid var(--acento);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-alta);
+  padding: var(--espacio-5);
+  animation: desplegar 300ms var(--transicion) both;
+}
+
+.lista-similares {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.similar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-2);
+  padding: var(--espacio-3) var(--espacio-4);
+  background: var(--superficie-suave);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  transition: border-color var(--transicion);
+}
+
+.similar.elegido {
+  border-color: var(--primario);
+  background: var(--superficie);
+}
+
+.similar-nombre {
+  font-weight: var(--peso-medio);
+}
+
+.similar-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-1) var(--espacio-4);
+  font-size: var(--texto-sm);
+  color: var(--texto-suave);
+}
+
+.insignia-desactivado {
+  color: var(--peligro);
+  background: var(--peligro-claro);
+}
+
+.formulario-reactivar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--espacio-3);
+  padding-top: var(--espacio-3);
+  border-top: 1px dashed var(--borde);
+}
+
+.formulario-reactivar .botones,
+.formulario-reactivar .nota {
+  grid-column: 1 / -1;
+}
+
+.antes {
+  font-size: var(--texto-xs);
+  color: var(--texto-suave);
+}
+
+/* =============================================
    Pantallas chicas y movimiento reducido
    ============================================= */
 @media (max-width: 600px) {

@@ -15,18 +15,21 @@ CREATE TABLE productos (
     nombre_producto      VARCHAR(100)  NOT NULL,
     precio_producto      DECIMAL(10,2) NOT NULL,
     descripcion_producto VARCHAR(255),
-    cantidad             INT NOT NULL DEFAULT 0
+    cantidad             INT NOT NULL DEFAULT 0,
+    estatus              ENUM('ACTIVO', 'DESACTIVADO') NOT NULL DEFAULT 'ACTIVO',
+    fecha_baja           DATETIME NULL
 );
 
 -- ---------------------------------------------
 -- 2. Vista
 -- ---------------------------------------------
 
--- Todos los productos con su cantidad
+-- Productos activos con su cantidad (los desactivados no se muestran)
 CREATE VIEW vw_productos AS
 SELECT id_producto, nombre_producto, precio_producto,
        descripcion_producto, cantidad
-FROM productos;
+FROM productos
+WHERE estatus = 'ACTIVO';
 
 DELIMITER //
 
@@ -74,6 +77,25 @@ BEGIN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'El precio y la cantidad no pueden ser negativos';
     END IF;
+
+    -- Registra la fecha de baja al desactivar y la limpia al reactivar
+    IF NEW.estatus = 'DESACTIVADO' AND OLD.estatus = 'ACTIVO' THEN
+        SET NEW.fecha_baja = NOW();
+    ELSEIF NEW.estatus = 'ACTIVO' THEN
+        SET NEW.fecha_baja = NULL;
+    END IF;
+END //
+
+-- Borrado logico: nunca se borra fisicamente un producto.
+-- MySQL no permite que un trigger cambie un DELETE por un UPDATE en la
+-- misma tabla (error 1442), asi que el trigger bloquea el DELETE y la
+-- baja se hace con sp_productos('ELIMINAR', ...), que cambia el estatus.
+CREATE TRIGGER trg_productos_before_delete
+BEFORE DELETE ON productos
+FOR EACH ROW
+BEGIN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'No se permite borrar productos; usa sp_productos(''ELIMINAR'', id, ...) para desactivarlo';
 END //
 
 -- ---------------------------------------------
@@ -86,7 +108,9 @@ END //
 --   'LEER_COMPRAR'  productos por comprar, con costo y total
 --   'INSERTAR'      nuevo producto (nombre, precio, descripcion, cantidad)
 --   'ACTUALIZAR'    cambia un producto por id (los parametros NULL no se cambian)
---   'ELIMINAR'      borra un producto por id
+--   'ELIMINAR'      desactiva un producto por id (borrado logico)
+--   'BUSCAR_SIMILARES'  productos con nombre parecido (LIKE), sin contar p_id
+--   'REACTIVAR'     activa un producto desactivado (los parametros NULL no se cambian)
 CREATE PROCEDURE sp_productos(
     IN p_accion      VARCHAR(20),
     IN p_id          INT,
@@ -108,7 +132,8 @@ BEGIN
                    precio_producto * fn_piezas_faltantes(cantidad) AS costo_producto,
                    SUM(precio_producto * fn_piezas_faltantes(cantidad)) OVER () AS total_compra
             FROM productos
-            WHERE fn_necesita_compra(precio_producto, cantidad)
+            WHERE estatus = 'ACTIVO'
+              AND fn_necesita_compra(precio_producto, cantidad)
             ORDER BY cantidad;
 
         WHEN 'INSERTAR' THEN
@@ -122,12 +147,44 @@ BEGIN
                 precio_producto      = IFNULL(p_precio, precio_producto),
                 descripcion_producto = IFNULL(p_descripcion, descripcion_producto),
                 cantidad             = IFNULL(p_cantidad, cantidad)
-            WHERE id_producto = p_id;
+            WHERE id_producto = p_id AND estatus = 'ACTIVO';
             SELECT p_id AS id_producto;
 
+        -- Baja logica: solo cambia el estatus a DESACTIVADO
         WHEN 'ELIMINAR' THEN
-            DELETE FROM productos WHERE id_producto = p_id;
+            UPDATE productos
+            SET estatus = 'DESACTIVADO'
+            WHERE id_producto = p_id AND estatus = 'ACTIVO';
             SELECT ROW_COUNT() AS filas_eliminadas;
+
+        -- Productos con nombre parecido (activos y desactivados), sin contar p_id.
+        -- Es parecido si un nombre contiene al otro o comparten la primera palabra
+        -- (de 3 letras o mas). Con p_nombre NULL o vacio regresa todos.
+        WHEN 'BUSCAR_SIMILARES' THEN
+            SELECT id_producto, nombre_producto, precio_producto,
+                   descripcion_producto, cantidad, estatus, fecha_baja
+            FROM productos
+            WHERE (p_id IS NULL OR id_producto <> p_id)
+              AND (p_nombre IS NULL OR TRIM(p_nombre) = ''
+                   OR nombre_producto LIKE CONCAT('%', TRIM(p_nombre), '%')
+                   OR TRIM(p_nombre) LIKE CONCAT('%', nombre_producto, '%')
+                   OR (CHAR_LENGTH(SUBSTRING_INDEX(TRIM(p_nombre), ' ', 1)) >= 3
+                       AND nombre_producto LIKE CONCAT('%', SUBSTRING_INDEX(TRIM(p_nombre), ' ', 1), '%')))
+            ORDER BY estatus DESC, nombre_producto;
+
+        -- Vuelve a activar un producto desactivado; los parametros NULL no se cambian
+        WHEN 'REACTIVAR' THEN
+            UPDATE productos
+            SET estatus              = 'ACTIVO',
+                nombre_producto      = IFNULL(p_nombre, nombre_producto),
+                precio_producto      = IFNULL(p_precio, precio_producto),
+                descripcion_producto = IFNULL(p_descripcion, descripcion_producto),
+                cantidad             = IFNULL(p_cantidad, cantidad)
+            WHERE id_producto = p_id AND estatus = 'DESACTIVADO';
+            IF ROW_COUNT() = 0 THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El producto no existe o ya esta activo';
+            END IF;
+            SELECT p_id AS id_producto;
 
         ELSE
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Accion no valida';
@@ -177,3 +234,7 @@ INSERT INTO productos (nombre_producto, precio_producto, descripcion_producto, c
 -- CALL sp_productos('INSERTAR', NULL, 'Sal 1 kg', 12.00, 'Sal de mesa', 20);
 -- CALL sp_productos('ACTUALIZAR', 1, NULL, NULL, NULL, 50);
 -- CALL sp_productos('ELIMINAR', 31, NULL, NULL, NULL, NULL);
+-- SELECT id_producto, estatus, fecha_baja FROM productos WHERE id_producto = 31;
+-- DELETE FROM productos WHERE id_producto = 31;   -- falla: lo bloquea el trigger
+-- CALL sp_productos('BUSCAR_SIMILARES', NULL, 'Sal de grano', NULL, NULL, NULL);
+-- CALL sp_productos('REACTIVAR', 31, 'Sal de mar 1 kg', NULL, NULL, 15);

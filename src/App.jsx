@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 const pesos = (n) => `$${Number(n).toFixed(2)}`
 
@@ -19,12 +19,164 @@ async function api(url, opciones = {}) {
   return datos
 }
 
+const campos = [
+  { nombre: 'nombre_producto', etiqueta: 'Nombre' },
+  { nombre: 'precio_producto', etiqueta: 'Precio', tipo: 'number', step: '0.01' },
+  { nombre: 'descripcion_producto', etiqueta: 'Descripción' },
+  { nombre: 'cantidad', etiqueta: 'Cantidad', tipo: 'number' },
+]
+
+const fecha = (f) => (f ? new Date(f).toLocaleDateString('es-MX') : '')
+
+// Pop up con los productos parecidos al que se quiere guardar.
+// modo 'insertar' | 'actualizar'; datos = lo que el usuario escribio en el formulario.
+function DialogoSimilares({ modo, editandoId, datos, candidatos, onGuardar, onReactivar, onCerrar }) {
+  const [elegidoId, setElegidoId] = useState(null)
+  const [cambios, setCambios] = useState(null)
+
+  useEffect(() => {
+    const teclado = (e) => e.key === 'Escape' && onCerrar()
+    window.addEventListener('keydown', teclado)
+    return () => window.removeEventListener('keydown', teclado)
+  }, [onCerrar])
+
+  // "Es el mismo": se precarga con lo escrito; si un campo va vacio, con el dato anterior
+  const esElMismo = (p) => {
+    setElegidoId(p.id_producto)
+    setCambios(
+      Object.fromEntries(
+        campos.map(({ nombre }) => [
+          nombre,
+          datos[nombre] !== '' && datos[nombre] != null ? datos[nombre] : p[nombre] ?? '',
+        ])
+      )
+    )
+  }
+
+  const reactivarConCambios = (e) => {
+    e.preventDefault()
+    onReactivar(elegidoId, {
+      ...cambios,
+      precio_producto: Number(cambios.precio_producto),
+      cantidad: Number(cambios.cantidad),
+    })
+  }
+
+  const hayDatos = datos.nombre_producto.trim() !== ''
+
+  return (
+    <div className="fondo-dialogo" onClick={onCerrar}>
+      <div
+        className="dialogo"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titulo-dialogo"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 className="subtitulo" id="titulo-dialogo">
+            {hayDatos ? 'Hay productos parecidos' : 'Productos desactivados'}
+          </h2>
+          <p className="nota">
+            {hayDatos
+              ? `${modo === 'insertar' ? 'Estás agregando' : `Estás cambiando el producto ${editandoId} a`} "${datos.nombre_producto}". ¿Es alguno de estos?`
+              : 'Elige el producto que quieres volver a activar.'}
+          </p>
+          {modo === 'actualizar' && (
+            <p className="nota">
+              Si reactivas uno, el producto {editandoId} se desactiva para que no quede duplicado.
+            </p>
+          )}
+        </div>
+
+        <ul className="lista-similares">
+          {candidatos.map((p) => {
+            const desactivado = p.estatus === 'DESACTIVADO'
+            const elegido = elegidoId === p.id_producto
+            return (
+              <li key={p.id_producto} className={`similar ${elegido ? 'elegido' : ''}`}>
+                <div className="barra">
+                  <span className="similar-nombre">
+                    <span className="id">{p.id_producto}</span> {p.nombre_producto}
+                  </span>
+                  <span className={`insignia ${desactivado ? 'insignia-desactivado' : ''}`}>
+                    {desactivado ? `Desactivado ${fecha(p.fecha_baja)}` : 'Activo'}
+                  </span>
+                </div>
+                <div className="similar-datos">
+                  <span>{pesos(p.precio_producto)}</span>
+                  <span>{p.cantidad} piezas</span>
+                  {p.descripcion_producto && <span>{p.descripcion_producto}</span>}
+                </div>
+
+                {!desactivado && <p className="nota">Este producto ya existe y está activo.</p>}
+
+                {desactivado && !elegido && (
+                  <div className="botones">
+                    <button className="boton boton-chico boton-primario" onClick={() => onReactivar(p.id_producto, null)}>
+                      Reactivar como estaba
+                    </button>
+                    <button className="boton boton-chico boton-claro" onClick={() => esElMismo(p)}>
+                      Es el mismo, actualizarlo
+                    </button>
+                  </div>
+                )}
+
+                {elegido && (
+                  <form className="formulario-reactivar" onSubmit={reactivarConCambios}>
+                    <p className="nota">Corrige los datos y se reactivará con ellos.</p>
+                    {campos.map(({ nombre, etiqueta, tipo, step }) => (
+                      <label className="campo" key={nombre}>
+                        <span>{etiqueta}</span>
+                        <input
+                          name={nombre}
+                          type={tipo}
+                          step={step}
+                          min={tipo === 'number' ? '0' : undefined}
+                          value={cambios[nombre]}
+                          onChange={(e) => setCambios({ ...cambios, [nombre]: e.target.value })}
+                          required={nombre !== 'descripcion_producto'}
+                        />
+                        <small className="antes">Antes: {p[nombre] ?? '—'}</small>
+                      </label>
+                    ))}
+                    <div className="botones">
+                      <button type="submit" className="boton boton-chico boton-primario">
+                        Reactivar con estos datos
+                      </button>
+                      <button type="button" className="boton boton-chico boton-claro" onClick={() => setElegidoId(null)}>
+                        Volver
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+
+        <div className="botones">
+          {hayDatos && (
+            <button className="boton boton-acento" onClick={onGuardar}>
+              {modo === 'insertar' ? 'No, agregar como nuevo' : 'No, guardar mis cambios'}
+            </button>
+          )}
+          <button className="boton boton-claro" onClick={onCerrar}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [productos, setProductos] = useState([])
   const [porComprar, setPorComprar] = useState(null)
   const [formulario, setFormulario] = useState(formularioVacio)
   const [editandoId, setEditandoId] = useState(null)
   const [error, setError] = useState('')
+  const [dialogo, setDialogo] = useState(null)
 
   const cargarProductos = () =>
     api('/api/productos').then(setProductos).catch((e) => setError(e.message))
@@ -44,9 +196,12 @@ function App() {
 
   const cambiar = (e) => setFormulario({ ...formulario, [e.target.name]: e.target.value })
 
-  const guardar = async (e) => {
-    e.preventDefault()
-    setError('')
+  const buscarSimilares = (nombre) =>
+    api(`/api/productos/similares?${new URLSearchParams({ nombre, excluir: editandoId ?? '' })}`)
+
+  // Inserta o actualiza sin volver a validar (se llama directo o desde el pop up)
+  const guardarDirecto = async () => {
+    setDialogo(null)
     const datos = {
       ...formulario,
       precio_producto: Number(formulario.precio_producto),
@@ -64,6 +219,56 @@ function App() {
       setError(err.message)
     }
   }
+
+  // Antes de guardar busca parecidos con LIKE:
+  // al insertar solo importan los desactivados; al actualizar (si cambio el nombre) tambien los activos
+  const guardar = async (e) => {
+    e.preventDefault()
+    setError('')
+    try {
+      const original = productos.find((x) => x.id_producto === editandoId)
+      const cambioNombre = !original || original.nombre_producto !== formulario.nombre_producto.trim()
+      if (cambioNombre) {
+        const similares = await buscarSimilares(formulario.nombre_producto.trim())
+        const candidatos = editandoId ? similares : similares.filter((p) => p.estatus === 'DESACTIVADO')
+        if (candidatos.length > 0) {
+          setDialogo({ datos: formulario, candidatos })
+          return
+        }
+      }
+      await guardarDirecto()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const verDesactivados = async () => {
+    setError('')
+    try {
+      const desactivados = (await buscarSimilares('')).filter((p) => p.estatus === 'DESACTIVADO')
+      if (desactivados.length === 0) return setError('No hay productos desactivados')
+      setDialogo({ datos: { ...formulario, nombre_producto: '' }, candidatos: desactivados })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  // cambios = null reactiva tal como estaba; si se editaba otro producto, ese se desactiva
+  const reactivar = async (id, cambios) => {
+    setDialogo(null)
+    try {
+      await api(`/api/productos/${id}/reactivar`, {
+        method: 'POST',
+        body: JSON.stringify({ ...cambios, desactivar_id: editandoId }),
+      })
+      cancelar()
+      recargar()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const cerrarDialogo = useCallback(() => setDialogo(null), [])
 
   // La lista por comprar no trae descripcion; se toma de la lista completa
   const editar = (id) => {
@@ -160,8 +365,23 @@ function App() {
               Cancelar
             </button>
           )}
+          <button type="button" className="boton boton-claro" onClick={verDesactivados}>
+            Ver desactivados
+          </button>
         </div>
       </form>
+
+      {dialogo && (
+        <DialogoSimilares
+          modo={editandoId ? 'actualizar' : 'insertar'}
+          editandoId={editandoId}
+          datos={dialogo.datos}
+          candidatos={dialogo.candidatos}
+          onGuardar={guardarDirecto}
+          onReactivar={reactivar}
+          onCerrar={cerrarDialogo}
+        />
+      )}
 
       <div className="barra">
         <h2 className="subtitulo">Inventario</h2>
