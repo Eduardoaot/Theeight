@@ -35,8 +35,9 @@
   --radio-chico: 8px;
 }
 
+/* Modo oscuro automatico, salvo que el interruptor pida el claro */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --fondo: #0d0d0d;
     --superficie: #1a1a19;
@@ -51,6 +52,23 @@
     --serie-1: #3987e5;
     --serie-2: #d95926;
   }
+}
+
+/* Modo oscuro pedido a mano */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --fondo: #0d0d0d;
+  --superficie: #1a1a19;
+  --texto: #ffffff;
+  --texto-suave: #c3c2b7;
+  --texto-tenue: #898781;
+  --rejilla: #2c2c2a;
+  --eje: #383835;
+  --borde: rgba(255, 255, 255, 0.1);
+  --resaltado: rgba(57, 135, 229, 0.14);
+  --peligro: #e66767;
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
 }
 
 *,
@@ -95,9 +113,26 @@ p {
 
 .encabezado {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--espacio-4);
+  padding-bottom: var(--espacio-3);
+}
+
+.encabezado > div {
+  display: flex;
   flex-direction: column;
   gap: var(--espacio-1);
-  padding-bottom: var(--espacio-3);
+}
+
+.tema {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tema:hover {
+  border-color: var(--serie-1);
 }
 
 .etiqueta {
@@ -309,30 +344,95 @@ p {
   }
 }
 
-/* Barra 100%: 2px de separacion entre segmentos */
-.apilada {
-  display: flex;
-  gap: 2px;
-  height: 24px;
+/* =============================================
+   Dona
+   ============================================= */
+.dona {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: var(--espacio-2) 0;
 }
 
-.segmento {
-  min-width: 2px;
-  border-radius: 4px;
+/* Girada para que la primera rebanada empiece arriba */
+.dona svg {
+  width: min(100%, 190px);
+  height: auto;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.rebanada:hover,
+.rebanada:focus-visible {
+  filter: brightness(1.12);
+}
+
+.dona-centro {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.dona-total {
+  font-size: var(--texto-xl);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+/* Barra apilada dentro de una pista: 2px de fondo separan los dos tramos */
+.apilada-barra {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  min-width: 1px;
+}
+
+.segmento-apilado {
+  flex-basis: 0;
+}
+
+.apilada-barra > .segmento-apilado:last-child {
+  border-radius: 0 4px 4px 0;
 }
 
 /* =============================================
-   Columnas por hora
+   Lineas por hora
    ============================================= */
-.columnas {
+.lienzo {
   position: relative;
-  display: flex;
-  align-items: flex-end;
-  gap: var(--espacio-1);
   min-width: 560px;
   height: 240px;
-  margin: var(--espacio-3) 0 var(--espacio-5) 2rem;
+  margin: var(--espacio-5) 0 var(--espacio-5) 2rem;
   border-bottom: 1px solid var(--eje);
+}
+
+/* El viewBox se estira; el trazo se mantiene en 2px reales */
+.lineas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.punto {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+  box-shadow: 0 0 0 2px var(--superficie);
+}
+
+.punto-valor {
+  position: absolute;
+  transform: translate(-50%, -12px);
+  font-size: var(--texto-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-suave);
+  white-space: nowrap;
 }
 
 .rejilla {
@@ -351,31 +451,33 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-.grupo-columnas {
-  position: relative;
-  flex: 1;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  gap: 2px;
-  border-radius: 4px 4px 0 0;
+/* Banda invisible por hora: es el blanco del hover y lleva la cruz */
+.banda {
+  position: absolute;
+  top: 0;
+  bottom: 0;
 }
 
-.grupo-columnas:hover,
-.grupo-columnas:focus-visible {
-  background: var(--resaltado);
+.banda::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--eje);
+  opacity: 0;
 }
 
-.columna {
-  position: relative;
-  width: min(40%, 24px);
-  min-height: 1px;
-  border-radius: 4px 4px 0 0;
+.banda:hover::before,
+.banda:focus-visible::before {
+  opacity: 1;
 }
 
 .etiqueta-x {
   position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   top: calc(100% + 6px);
   font-size: var(--texto-xs);
   color: var(--texto-tenue);
@@ -401,42 +503,53 @@ p {
 }
 
 /* =============================================
-   Top
+   Histograma por semana
    ============================================= */
-.top {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--espacio-4);
-}
-
-.top-titulo {
+.histograma {
+  position: relative;
   display: flex;
-  align-items: center;
-  font-size: var(--texto-sm);
-  font-weight: 600;
-  margin-bottom: var(--espacio-2);
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 620px;
+  height: 220px;
+  margin: var(--espacio-5) 0 var(--espacio-5) 2rem;
+  border-bottom: 1px solid var(--eje);
 }
 
-.top-lista {
+.caja {
+  position: relative;
+  flex: 1;
+  height: 100%;
   display: flex;
-  flex-direction: column;
-  gap: var(--espacio-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--texto-sm);
+  justify-content: center;
+  align-items: flex-end;
+  border-radius: 4px 4px 0 0;
 }
 
-.top-lista li {
-  display: grid;
-  grid-template-columns: 1.5rem 1fr auto;
-  gap: var(--espacio-2);
-  align-items: baseline;
+.caja:hover,
+.caja:focus-visible {
+  background: var(--resaltado);
 }
 
-.top-posicion {
-  color: var(--texto-tenue);
+.columna-h {
+  width: min(72%, 24px);
+  min-height: 1px;
+  background: var(--serie-1);
+  border-radius: 4px 4px 0 0;
+}
+
+.caja:hover .columna-h {
+  filter: brightness(1.12);
+}
+
+.caja-valor {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  font-size: var(--texto-xs);
   font-variant-numeric: tabular-nums;
+  color: var(--texto-suave);
 }
 
 /* =============================================
@@ -474,6 +587,34 @@ th {
   background: var(--superficie);
 }
 
+/* Encabezado que ordena la tabla al hacer clic */
+.orden {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-1);
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.numero .orden {
+  justify-content: flex-end;
+}
+
+.orden:hover {
+  color: var(--texto);
+}
+
+.orden-flecha {
+  font-size: 0.6em;
+  color: var(--serie-1);
+}
+
 tbody tr:hover {
   background: var(--resaltado);
 }
@@ -506,4 +647,234 @@ tbody tr:hover {
 [tabindex]:focus-visible {
   outline: 2px solid var(--serie-1);
   outline-offset: 2px;
+}
+
+/* =============================================
+   Areas: visitas y asistencia en la misma fila
+   ============================================= */
+.areas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-1);
+}
+
+.fila-area {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr) 3.5rem minmax(0, 0.5fr) 3.5rem;
+  align-items: center;
+  gap: var(--espacio-3);
+  padding: var(--espacio-1) 0;
+  border-radius: var(--radio-chico);
+  outline-offset: 2px;
+}
+
+.fila-area:hover {
+  background: var(--resaltado);
+}
+
+.cabecera-area,
+.cabecera-area:hover {
+  padding-bottom: var(--espacio-2);
+  font-size: var(--texto-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-tenue);
+  background: none;
+  border-bottom: 1px solid var(--rejilla);
+  border-radius: 0;
+}
+
+/* Gris: la asistencia no es una de las dos actividades */
+.relleno-asistencia {
+  background: var(--texto-tenue);
+}
+
+@media (max-width: 860px) {
+  .fila-area {
+    grid-template-columns: 7rem minmax(0, 1fr) 3rem 3.5rem;
+  }
+
+  .fila-area > div:last-of-type,
+  .cabecera-area > span:nth-child(4) {
+    display: none;
+  }
+}
+
+/* =============================================
+   Desglose del indicador
+   ============================================= */
+.desglose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-1);
+  margin: var(--espacio-2) 0 0;
+  padding: var(--espacio-2) 0 0;
+  border-top: 1px solid var(--rejilla);
+  list-style: none;
+  font-size: var(--texto-sm);
+  color: var(--texto-suave);
+}
+
+/* Nombre arriba y cifra abajo: en una tarjeta angosta no caben en un renglon */
+.desglose li {
+  display: flex;
+  flex-direction: column;
+}
+
+.desglose-nombre {
+  display: flex;
+  align-items: center;
+  gap: var(--espacio-2);
+}
+
+.desglose-dato {
+  padding-left: 18px;
+}
+
+.desglose .muestra {
+  margin-right: 0;
+}
+
+.desglose strong {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================
+   Panel de tendencias
+   ============================================= */
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio-2);
+}
+
+.acciones .control {
+  cursor: pointer;
+}
+
+.panel {
+  width: min(680px, calc(100% - 2rem));
+  max-height: 85vh;
+  padding: var(--espacio-5);
+  color: var(--texto);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: auto;
+}
+
+.panel::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.panel[open] {
+  animation: entrar 0.25s ease both;
+}
+
+.panel-encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--espacio-4);
+  margin-bottom: var(--espacio-4);
+}
+
+.panel-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-5);
+  font-size: var(--texto-sm);
+  line-height: 1.6;
+}
+
+.panel-titulo {
+  margin-bottom: var(--espacio-2);
+  font-size: var(--texto-base);
+  font-weight: 600;
+}
+
+.panel-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacio-3);
+  margin: var(--espacio-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel-lista li {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--espacio-3);
+  border-left: 2px solid var(--rejilla);
+}
+
+.panel-area {
+  display: flex;
+  align-items: baseline;
+  gap: var(--espacio-2);
+}
+
+/* Sin color de serie: el porcentaje no es masajes ni recuperacion */
+.cambio {
+  font-size: var(--texto-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-suave);
+}
+
+/* =============================================
+   Animaciones
+   ============================================= */
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.tarjeta {
+  animation: entrar 0.45s ease both;
+}
+
+/* Las marcas se pintan en cero y crecen hasta su valor */
+.barra-relleno,
+.apilada-barra {
+  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.columna-h,
+.caja-valor {
+  transition: height 0.7s cubic-bezier(0.22, 1, 0.36, 1), bottom 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rebanada {
+  transition: stroke-dasharray 0.9s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease;
+}
+
+body,
+.tarjeta,
+.control,
+th {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.barra-fila,
+.fila-area,
+.caja,
+.orden,
+tbody tr,
+.banda::before,
+.columna-h {
+  transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* Quien pida menos movimiento ve los valores finales, sin recorrido */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
